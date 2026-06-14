@@ -127,14 +127,19 @@ async def _process_frame(session_id: str, frame_b64: str, voice: str = "nova") -
 
 async def _broadcast(result: dict):
     """Push result to all connected camera WebSocket subscribers."""
+    if not _camera_clients:
+        return
     dead = []
-    for ws in _camera_clients:
+    for ws in list(_camera_clients):  # snapshot to avoid mutation during iteration
         try:
             await ws.send_json(result)
         except Exception:
             dead.append(ws)
     for ws in dead:
-        _camera_clients.remove(ws)
+        try:
+            _camera_clients.remove(ws)
+        except ValueError:
+            pass
 
 
 # ── HTTP: single frame ────────────────────────────────────────────────────────
@@ -316,10 +321,17 @@ async def websocket_camera_output(websocket: WebSocket, session_id: str):
     _camera_clients.append(websocket)
     try:
         while True:
-            await asyncio.sleep(30)
-            await websocket.send_json({"heartbeat": True})
+            await asyncio.sleep(20)
+            try:
+                await websocket.send_json({"heartbeat": True})
+            except Exception:
+                break  # send failed — connection is dead, exit to finally
     except WebSocketDisconnect:
         pass
+    except Exception:
+        pass
     finally:
-        if websocket in _camera_clients:
+        try:
             _camera_clients.remove(websocket)
+        except ValueError:
+            pass

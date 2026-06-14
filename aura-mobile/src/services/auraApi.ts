@@ -51,6 +51,11 @@ export interface DashboardEntry {
   agent_decisions: AgentDecision[];
 }
 
+export interface VoiceQueryResult {
+  query: string;
+  response: string;
+}
+
 export async function sendFrame(
   frameBase64: string,
   sessionId: string,
@@ -74,18 +79,50 @@ export async function sendFrame(
   return res.json();
 }
 
-export async function sendVoiceQuery(
-  audioBase64: string,
+/**
+ * Send a text question to Aura. Uses scene memory from the current session
+ * to answer contextually (e.g. "what did I just pass?").
+ */
+export async function sendTextQuery(
+  query: string,
   sessionId: string,
-): Promise<{ answer: string; audio_base64: string | null }> {
+): Promise<VoiceQueryResult> {
   const base = await getApiUrl();
-  const res = await fetch(`${base}/voice/query-audio`, {
+  const res = await fetch(`${base}/voice/query`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ audio_base64: audioBase64, session_id: sessionId }),
+    body: JSON.stringify({ query, session_id: sessionId, return_audio: false }),
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json();
+  const data = await res.json();
+  return { query: data.query ?? query, response: data.response ?? '' };
+}
+
+/**
+ * Send a recorded audio clip to Aura. The server transcribes it with Whisper,
+ * then answers using scene memory. Returns transcribed query + text response.
+ */
+export async function sendVoiceQuery(
+  audioUri: string,
+  sessionId: string,
+): Promise<VoiceQueryResult> {
+  const base = await getApiUrl();
+  const formData = new FormData();
+  formData.append('file', {
+    uri: audioUri,
+    name: 'query.m4a',
+    type: 'audio/mp4',
+  } as any);
+  formData.append('session_id', sessionId);
+  formData.append('return_audio', 'false');
+
+  const res = await fetch(`${base}/voice/query-audio`, {
+    method: 'POST',
+    body: formData,
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = await res.json();
+  return { query: data.query ?? '', response: data.response ?? '' };
 }
 
 export async function clearSession(sessionId: string): Promise<void> {

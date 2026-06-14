@@ -1,13 +1,17 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
-  Vibration, StatusBar, Dimensions,
+  Vibration, StatusBar, Dimensions, Modal, TextInput,
+  KeyboardAvoidingView, Platform, ActivityIndicator,
 } from 'react-native';
 import { CameraView, CameraType, useCameraPermissions } from 'expo-camera';
 import { useKeepAwake } from 'expo-keep-awake';
 import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { sendFrame, clearSession, checkHealth, FrameResult, AgentDecision } from '../services/auraApi';
+import {
+  sendFrame, clearSession, checkHealth, sendTextQuery,
+  FrameResult, AgentDecision, VoiceQueryResult,
+} from '../services/auraApi';
 import { audioPlayer } from '../services/audioPlayer';
 
 const { width: W } = Dimensions.get('window');
@@ -36,10 +40,16 @@ export default function HomeScreen({ navigation }: any) {
   const [spokeCount, setSpokeCount] = useState(0);
   const [latency, setLatency] = useState<number | null>(null);
 
+  // Voice query modal state
+  const [showQuery, setShowQuery] = useState(false);
+  const [queryText, setQueryText] = useState('');
+  const [queryLoading, setQueryLoading] = useState(false);
+  const [queryResult, setQueryResult] = useState<VoiceQueryResult | null>(null);
+  const [queryError, setQueryError] = useState('');
+
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const processingRef = useRef(false);
 
-  // Check backend connectivity on mount
   useEffect(() => {
     checkHealth().then(setConnected);
   }, []);
@@ -114,12 +124,38 @@ export default function HomeScreen({ navigation }: any) {
     setError('');
   }, [stop]);
 
+  const submitQuery = useCallback(async () => {
+    const q = queryText.trim();
+    if (!q) return;
+    setQueryLoading(true);
+    setQueryError('');
+    setQueryResult(null);
+    try {
+      const res = await sendTextQuery(q, SESSION_ID);
+      setQueryResult(res);
+      audioPlayer.speak(res.response, 4);
+    } catch (err: any) {
+      setQueryError(err.message ?? 'Could not reach backend');
+    } finally {
+      setQueryLoading(false);
+    }
+  }, [queryText]);
+
+  const closeQuery = useCallback(() => {
+    setShowQuery(false);
+    setQueryText('');
+    setQueryResult(null);
+    setQueryError('');
+  }, []);
+
   if (!permission) return <View style={s.container} />;
   if (!permission.granted) {
     return (
       <View style={[s.container, s.center]}>
         <Text style={s.permTitle}>Camera Access Required</Text>
-        <Text style={s.permText}>Aura needs camera access to analyze your surroundings and guide you safely.</Text>
+        <Text style={s.permText}>
+          Aura needs camera access to analyze your surroundings and guide you safely.
+        </Text>
         <TouchableOpacity style={s.permBtn} onPress={requestPermission}>
           <Text style={s.permBtnText}>Grant Permission</Text>
         </TouchableOpacity>
@@ -142,7 +178,12 @@ export default function HomeScreen({ navigation }: any) {
           <Text style={s.title}>AURA <Text style={{ color: '#7c3aed' }}>2.0</Text></Text>
         </View>
         <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-          <View style={[s.connDot, { backgroundColor: connected === true ? '#10b981' : connected === false ? '#ef4444' : '#475569' }]} />
+          <View style={[s.connDot, {
+            backgroundColor: connected === true ? '#10b981' : connected === false ? '#ef4444' : '#475569',
+          }]} />
+          <TouchableOpacity onPress={() => setShowQuery(true)} style={s.iconBtn}>
+            <Text style={{ color: '#94a3b8', fontSize: 15 }}>?</Text>
+          </TouchableOpacity>
           <TouchableOpacity onPress={() => navigation.navigate('Settings')} style={s.settingsBtn}>
             <Text style={{ color: '#64748b', fontSize: 18 }}>⚙</Text>
           </TouchableOpacity>
@@ -169,7 +210,7 @@ export default function HomeScreen({ navigation }: any) {
         >
           <Text style={s.mainBtnTxt}>{running ? '■  Stop Aura' : '▶  Start Aura'}</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={s.iconBtn} onPress={reset}>
+        <TouchableOpacity style={s.squareBtn} onPress={reset}>
           <Text style={{ color: '#64748b', fontSize: 16 }}>↺</Text>
         </TouchableOpacity>
       </View>
@@ -231,7 +272,11 @@ export default function HomeScreen({ navigation }: any) {
                     }]} />
                   </View>
                   <Text style={s.agentScore}>{d.score > 0 ? d.score.toFixed(2) : '—'}</Text>
-                  {isWinner && <View style={[s.winBadge, { backgroundColor: pc }]}><Text style={s.winTxt}>W</Text></View>}
+                  {isWinner && (
+                    <View style={[s.winBadge, { backgroundColor: pc }]}>
+                      <Text style={s.winTxt}>W</Text>
+                    </View>
+                  )}
                 </View>
               );
             })}
@@ -271,6 +316,73 @@ export default function HomeScreen({ navigation }: any) {
 
         <View style={{ height: insets.bottom + 20 }} />
       </ScrollView>
+
+      {/* ── Ask Aura modal ──────────────────────────────────────────────── */}
+      <Modal
+        visible={showQuery}
+        animationType="slide"
+        transparent
+        onRequestClose={closeQuery}
+      >
+        <KeyboardAvoidingView
+          style={s.modalOverlay}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
+          <View style={s.modalSheet}>
+            {/* Modal header */}
+            <View style={s.modalHeader}>
+              <Text style={s.modalTitle}>Ask Aura</Text>
+              <TouchableOpacity onPress={closeQuery} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+                <Text style={s.modalClose}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={s.modalHint}>
+              Ask about what Aura sees — e.g. "How many people are nearby?" or "What text was visible?"
+            </Text>
+
+            {/* Input */}
+            <TextInput
+              style={s.queryInput}
+              value={queryText}
+              onChangeText={setQueryText}
+              placeholder="Type your question…"
+              placeholderTextColor="#475569"
+              multiline
+              maxLength={200}
+              returnKeyType="send"
+              onSubmitEditing={submitQuery}
+              autoFocus
+            />
+
+            <TouchableOpacity
+              style={[s.sendBtn, (!queryText.trim() || queryLoading) && { opacity: 0.5 }]}
+              onPress={submitQuery}
+              disabled={!queryText.trim() || queryLoading}
+            >
+              {queryLoading
+                ? <ActivityIndicator color="#fff" size="small" />
+                : <Text style={s.sendBtnTxt}>Send</Text>}
+            </TouchableOpacity>
+
+            {/* Error */}
+            {!!queryError && (
+              <View style={s.queryErrorBanner}>
+                <Text style={s.queryErrorTxt}>{queryError}</Text>
+              </View>
+            )}
+
+            {/* Response */}
+            {queryResult && (
+              <View style={s.queryResultCard}>
+                <Text style={s.queryQuestion}>You: {queryResult.query}</Text>
+                <Text style={s.queryAnswer}>{queryResult.response}</Text>
+              </View>
+            )}
+
+            <View style={{ height: insets.bottom + 8 }} />
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 }
@@ -280,13 +392,18 @@ const s = StyleSheet.create({
   center: { justifyContent: 'center', alignItems: 'center', padding: 24 },
   header: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#1e1e30',
+    paddingHorizontal: 16, paddingVertical: 10,
+    borderBottomWidth: 1, borderBottomColor: '#1e1e30',
   },
   title: { fontSize: 18, fontWeight: '700', color: '#e2e8f0' },
   dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#475569' },
   dotLive: { backgroundColor: '#ef4444' },
   connDot: { width: 7, height: 7, borderRadius: 3.5 },
   settingsBtn: { padding: 4 },
+  iconBtn: {
+    width: 30, height: 30, borderRadius: 15, backgroundColor: '#1e1e30',
+    alignItems: 'center', justifyContent: 'center',
+  },
   camWrap: { position: 'relative', width: W, height: W * 0.65, backgroundColor: '#000' },
   camera: { flex: 1 },
   camBorder: { position: 'absolute', inset: 0, borderWidth: 2 },
@@ -304,7 +421,7 @@ const s = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   mainBtnTxt: { color: '#fff', fontWeight: '700', fontSize: 15 },
-  iconBtn: {
+  squareBtn: {
     width: 44, height: 44, borderRadius: 8, backgroundColor: '#1e1e30',
     alignItems: 'center', justifyContent: 'center',
   },
@@ -313,19 +430,14 @@ const s = StyleSheet.create({
     paddingHorizontal: 16, paddingVertical: 8,
   },
   errorTxt: { color: '#ef4444', fontSize: 12 },
-  narrationCard: {
-    margin: 12, padding: 14, borderRadius: 10, borderWidth: 1,
-  },
+  narrationCard: { margin: 12, padding: 14, borderRadius: 10, borderWidth: 1 },
   narrationLabel: { fontSize: 10, fontWeight: '700', marginBottom: 4, letterSpacing: 0.5 },
   narrationText: { fontSize: 17, fontWeight: '500', color: '#e2e8f0', lineHeight: 24 },
   suppressedTxt: { fontSize: 11, color: '#475569', marginTop: 6 },
   placeholder: { textAlign: 'center', color: '#475569', marginTop: 20, fontSize: 14 },
-  statsRow: {
-    flexDirection: 'row', marginHorizontal: 12, marginBottom: 8, gap: 6,
-  },
+  statsRow: { flexDirection: 'row', marginHorizontal: 12, marginBottom: 8, gap: 6 },
   statCell: {
-    flex: 1, backgroundColor: '#11111a', padding: 8, borderRadius: 6,
-    alignItems: 'center',
+    flex: 1, backgroundColor: '#11111a', padding: 8, borderRadius: 6, alignItems: 'center',
   },
   statLabel: { fontSize: 9, color: '#64748b', marginBottom: 2 },
   statVal: { fontSize: 16, fontWeight: '700', color: '#e2e8f0', fontVariant: ['tabular-nums'] },
@@ -348,6 +460,36 @@ const s = StyleSheet.create({
   permTitle: { fontSize: 20, fontWeight: '700', color: '#e2e8f0', marginBottom: 12, textAlign: 'center' },
   permText: { fontSize: 14, color: '#94a3b8', textAlign: 'center', lineHeight: 22, marginBottom: 24 },
   permBtn: { backgroundColor: '#7c3aed', paddingHorizontal: 32, paddingVertical: 14, borderRadius: 8 },
-  permBtnTxt: { color: '#fff', fontWeight: '700', fontSize: 15 },
   permBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  // Modal
+  modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.6)' },
+  modalSheet: {
+    backgroundColor: '#0f0f1a', borderTopLeftRadius: 20, borderTopRightRadius: 20,
+    padding: 20, paddingBottom: 0, maxHeight: '85%',
+  },
+  modalHeader: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8,
+  },
+  modalTitle: { fontSize: 17, fontWeight: '700', color: '#e2e8f0' },
+  modalClose: { fontSize: 16, color: '#64748b' },
+  modalHint: { fontSize: 12, color: '#475569', lineHeight: 16, marginBottom: 16 },
+  queryInput: {
+    backgroundColor: '#11111a', color: '#e2e8f0', fontSize: 15,
+    borderWidth: 1, borderColor: '#1e1e30', borderRadius: 10,
+    paddingHorizontal: 14, paddingVertical: 12,
+    minHeight: 60, textAlignVertical: 'top', marginBottom: 10,
+  },
+  sendBtn: {
+    backgroundColor: '#7c3aed', paddingVertical: 13, borderRadius: 10,
+    alignItems: 'center', marginBottom: 12,
+  },
+  sendBtnTxt: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  queryErrorBanner: { backgroundColor: '#2d1b1b', padding: 12, borderRadius: 8, marginBottom: 12 },
+  queryErrorTxt: { color: '#ef4444', fontSize: 13 },
+  queryResultCard: {
+    backgroundColor: '#0d1f2d', borderWidth: 1, borderColor: '#1e3a5f',
+    borderRadius: 10, padding: 14, marginBottom: 12,
+  },
+  queryQuestion: { fontSize: 11, color: '#475569', marginBottom: 8 },
+  queryAnswer: { fontSize: 15, color: '#e2e8f0', lineHeight: 22 },
 });

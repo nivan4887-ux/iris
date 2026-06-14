@@ -79,7 +79,7 @@ class TestDashboard:
         assert r.status_code == 200
         data = r.json()
         assert "current_scene" in data
-        assert "user_context" in data
+        assert "context" in data
         assert data["latest_decision"] is None
 
     def test_history_empty_session(self):

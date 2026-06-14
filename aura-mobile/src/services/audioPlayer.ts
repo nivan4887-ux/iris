@@ -8,6 +8,7 @@ class AudioPlayer {
   private queue: QueueItem[] = [];
   private playing = false;
   private currentSound: Audio.Sound | null = null;
+  private speakingTTS = false;
 
   async init() {
     await Audio.setAudioModeAsync({
@@ -31,9 +32,9 @@ class AudioPlayer {
   speak(text: string, priority: number) {
     if (priority === 1) {
       this.interrupt();
-      Speech.speak(text, { language: 'en-US', rate: 0.9, pitch: 1.0 });
-    } else if (!this.playing) {
-      Speech.speak(text, { language: 'en-US', rate: 0.9, pitch: 1.0 });
+      this._doSpeak(text);
+    } else if (!this.playing && !this.speakingTTS) {
+      this._doSpeak(text);
     }
   }
 
@@ -46,15 +47,36 @@ class AudioPlayer {
     }
     Speech.stop();
     this.playing = false;
+    this.speakingTTS = false;
+  }
+
+  private _doSpeak(text: string) {
+    this.speakingTTS = true;
+    Speech.speak(text, {
+      language: 'en-US',
+      rate: 0.9,
+      pitch: 1.0,
+      onDone: () => {
+        this.speakingTTS = false;
+        this._next();
+      },
+      onError: () => {
+        this.speakingTTS = false;
+        this._next();
+      },
+      onStopped: () => {
+        this.speakingTTS = false;
+      },
+    });
   }
 
   private async _next() {
-    if (this.playing || this.queue.length === 0) return;
+    if (this.playing || this.speakingTTS || this.queue.length === 0) return;
     const item = this.queue.shift()!;
     this.playing = true;
 
     try {
-      const uri = FileSystem.cacheDirectory + `aura_audio_${Date.now()}.mp3`;
+      const uri = `${FileSystem.cacheDirectory}aura_audio_${Date.now()}.mp3`;
       await FileSystem.writeAsStringAsync(uri, item.base64, {
         encoding: FileSystem.EncodingType.Base64,
       });
