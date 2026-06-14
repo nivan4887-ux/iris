@@ -1,0 +1,40 @@
+# Environment — never commit API keys
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+
+# Node / Expo
+aura-mobile/node_modules/
+aura-mobile/.expo/
+aura-mobile/.expo-shared/
+aura-mobile/dist/
+aura-mobile/web-build/
+aura-mobile/*.jks
+aura-mobile/*.p8
+aura-mobile/*.p12
+aura-mobile/*.key
+aura-mobile/*.mobileprovision
+aura-mobile/google-services.json
+aura-mobile/GoogleService-Info.plist
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp

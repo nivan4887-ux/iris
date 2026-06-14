@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Aura 2.0 — Agent Dashboard</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #090910; --surface: #11111a; --border: #1e1e30;
+    --text: #e2e8f0; --muted: #64748b;
+    --purple: #7c3aed; --red: #ef4444; --orange: #f97316;
+    --blue: #3b82f6; --green: #10b981; --yellow: #eab308;
+  }
+  body { background: var(--bg); color: var(--text); font-family: system-ui, sans-serif; height: 100vh; overflow: hidden; }
+
+  /* ── Layout ── */
+  .layout { display: grid; grid-template-columns: 380px 1fr 300px; grid-template-rows: 48px 1fr; height: 100vh; }
+  header { grid-column: 1/-1; display: flex; align-items: center; gap: 16px; padding: 0 20px; background: var(--surface); border-bottom: 1px solid var(--border); }
+  header h1 { font-size: 18px; font-weight: 700; }
+  header h1 span { color: var(--purple); }
+  .tagline { font-size: 12px; color: var(--muted); }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); transition: background 0.3s; }
+  .status-dot.live { background: var(--red); box-shadow: 0 0 6px var(--red); animation: pulse 1.4s ease-in-out infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
+  .stat-chip { font-size: 11px; color: var(--muted); background: var(--bg); border: 1px solid var(--border); padding: 2px 8px; border-radius: 10px; }
+  .stat-chip strong { color: var(--text); }
+
+  /* ── Left column: camera + narration ── */
+  .col-left { border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; }
+  .camera-box { position: relative; background: #000; flex-shrink: 0; }
+  video { width: 100%; display: block; max-height: 210px; object-fit: cover; }
+  canvas { display: none; }
+  .cam-badge { position: absolute; top: 6px; left: 6px; background: rgba(239,68,68,.9); color:#fff; padding: 2px 7px; border-radius: 4px; font-size: 10px; font-weight: 700; }
+  .speak-badge { position: absolute; top: 6px; right: 6px; background: rgba(124,58,237,.9); color:#fff; padding: 2px 7px; border-radius: 4px; font-size: 10px; }
+  .cam-controls { padding: 10px 12px; display: flex; gap: 8px; border-bottom: 1px solid var(--border); }
+  .btn { padding: 7px 14px; border: none; border-radius: 5px; font-size: 12px; font-weight: 600; cursor: pointer; transition: opacity .15s; }
+  .btn:disabled { opacity:.4; cursor:default; }
+  .btn-primary { background: var(--purple); color: #fff; flex:1; }
+  .btn-danger  { background: var(--red); color: #fff; flex:1; }
+  .btn-ghost   { background: var(--border); color: var(--text); }
+
+  .narration-box { padding: 12px; flex: 1; overflow-y: auto; }
+  .narration-card { padding: 12px; border-radius: 8px; border: 1px solid; margin-bottom: 8px; transition: all .3s; }
+  .narration-label { font-size: 10px; font-weight: 700; margin-bottom: 4px; }
+  .narration-text  { font-size: 15px; font-weight: 500; line-height: 1.45; }
+  .suppressed-list { margin-top: 8px; font-size: 11px; color: var(--muted); }
+  .suppressed-list span { text-decoration: line-through; margin-right: 6px; }
+
+  .stats-row { display: grid; grid-template-columns: repeat(4,1fr); gap: 6px; padding: 10px 12px; border-top: 1px solid var(--border); flex-shrink: 0; }
+  .stat-cell { background: var(--bg); padding: 7px 10px; border-radius: 5px; }
+  .stat-cell .lbl { font-size: 9px; color: var(--muted); }
+  .stat-cell .val { font-size: 17px; font-weight: 600; font-family: monospace; }
+
+  /* ── Centre column: agent scores ── */
+  .col-centre { padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; }
+  .panel-title { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 2px; }
+  .agent-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; }
+  .agent-name { width: 76px; font-size: 12px; font-weight: 600; }
+  .agent-bar-wrap { flex: 1; height: 8px; background: var(--surface); border-radius: 4px; overflow: hidden; }
+  .agent-bar { height: 100%; border-radius: 4px; transition: width .4s cubic-bezier(.4,0,.2,1), background .3s; }
+  .agent-score { width: 34px; text-align: right; font-size: 11px; color: var(--muted); font-family: monospace; }
+  .win-badge { font-size: 8px; font-weight: 700; background: var(--purple); color: #fff; padding: 1px 5px; border-radius: 3px; }
+  .scene-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .scene-card { background: var(--surface); border-radius: 6px; padding: 10px 12px; border: 1px solid var(--border); }
+  .scene-card .sc-label { font-size: 9px; color: var(--muted); font-weight: 600; text-transform: uppercase; margin-bottom: 3px; }
+  .scene-card .sc-val { font-size: 13px; font-weight: 600; }
+  .tag { display: inline-block; padding: 1px 7px; border-radius: 10px; font-size: 10px; background: var(--border); margin: 1px 2px 1px 0; }
+
+  /* ── Right column: history ── */
+  .col-right { border-left: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; }
+  .col-right-header { padding: 10px 12px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+  .history-list { flex: 1; overflow-y: auto; }
+  .history-item { padding: 10px 12px; border-bottom: 1px solid var(--border); cursor: default; transition: background .15s; }
+  .history-item:hover { background: var(--surface); }
+  .hi-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 3px; }
+  .hi-agent { font-size: 10px; font-weight: 700; }
+  .hi-time { font-size: 9px; color: var(--muted); }
+  .hi-narration { font-size: 12px; color: var(--text); line-height: 1.4; }
+  .hi-priority { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; }
+
+  /* ── Connection / error banners ── */
+  .banner { padding: 8px 14px; font-size: 12px; border-bottom: 1px solid; display: none; }
+  .banner.show { display: block; }
+  .banner-error { background: #2d1b1b; color: var(--red); border-color: #5a2222; }
+  .banner-info  { background: #1b2226; color: var(--blue); border-color: #1e3a4a; }
+
+  /* ── Priority colours ── */
+  .p1 { --pc: #ef4444; } .p2 { --pc: #f97316; } .p3 { --pc: #3b82f6; }
+  .p4 { --pc: #10b981; } .p5 { --pc: #475569; }
+</style>
+</head>
+<body>
+
+<div class="layout">
+  <!-- Header -->
+  <header>
+    <span class="status-dot" id="dotLive"></span>
+    <h1>AURA <span>2.0</span></h1>
+    <span class="tagline">Autonomous Context Intelligence · Visually Impaired Companion</span>
+    <div style="margin-left:auto; display:flex; gap:8px; align-items:center">
+      <span class="stat-chip">Frames: <strong id="hdrFrames">0</strong></span>
+      <span class="stat-chip">Spoke: <strong id="hdrSpoke">0</strong></span>
+      <span class="stat-chip">Latency: <strong id="hdrLatency">—</strong></span>
+      <span class="stat-chip" id="hdrSession" style="display:none"></span>
+    </div>
+  </header>
+
+  <!-- Left -->
+  <div class="col-left">
+    <div id="errBanner" class="banner banner-error"></div>
+    <div id="infoBanner" class="banner banner-info">Connecting to dashboard WebSocket…</div>
+    <div class="camera-box">
+      <video id="video" autoplay muted playsinline></video>
+      <canvas id="canvas" width="640" height="480"></canvas>
+      <span id="liveBadge" class="cam-badge" style="display:none">● LIVE</span>
+      <span id="speakBadge" class="speak-badge" style="display:none">♪ Speaking</span>
+    </div>
+    <div class="cam-controls">
+      <button id="btnStart" class="btn btn-primary" onclick="startAura()">▶ Start Aura</button>
+      <button id="btnStop"  class="btn btn-danger"   onclick="stopAura()" style="display:none">■ Stop</button>
+      <button class="btn btn-ghost" onclick="clearHistory()" title="Reset session">↺</button>
+    </div>
+
+    <div class="narration-box">
+      <div class="panel-title">Latest Narration</div>
+      <div id="narrationCard" class="narration-card" style="border-color:var(--border); background:var(--surface); display:none">
+        <div class="narration-label" id="narrationLabel"></div>
+        <div class="narration-text" id="narrationText"></div>
+        <div class="suppressed-list" id="suppressedList"></div>
+      </div>
+      <div id="narrationEmpty" style="font-size:13px; color:var(--muted); margin-top:8px">No narration yet — start Aura to begin.</div>
+    </div>
+
+    <div class="stats-row">
+      <div class="stat-cell"><div class="lbl">Frames</div><div class="val" id="statFrames">0</div></div>
+      <div class="stat-cell"><div class="lbl">Narrations</div><div class="val" id="statSpoke">0</div></div>
+      <div class="stat-cell"><div class="lbl">Latency</div><div class="val" id="statLatency">—</div></div>
+      <div class="stat-cell"><div class="lbl">People</div><div class="val" id="statPeople">—</div></div>
+    </div>
+  </div>
+
+  <!-- Centre -->
+  <div class="col-centre">
+    <div>
+      <div class="panel-title">Agent Scores</div>
+      <div id="agentRows">
+        <div style="color:var(--muted); font-size:13px; margin-top:8px">Waiting for first frame…</div>
+      </div>
+    </div>
+
+    <div>
+      <div class="panel-title">Scene Graph</div>
+      <div class="scene-grid" id="sceneGrid">
+        <div class="scene-card"><div class="sc-label">Environment</div><div class="sc-val" id="sgEnv">—</div></div>
+        <div class="scene-card"><div class="sc-label">Path clear</div><div class="sc-val" id="sgPath">—</div></div>
+        <div class="scene-card"><div class="sc-label">People</div><div class="sc-val" id="sgPeople">—</div></div>
+        <div class="scene-card"><div class="sc-label">Hazards</div><div class="sc-val" id="sgHazards">—</div></div>
+        <div class="scene-card" style="grid-column:1/-1"><div class="sc-label">Text Detected</div><div class="sc-val" id="sgText" style="font-size:12px; font-weight:400">—</div></div>
+        <div class="scene-card" style="grid-column:1/-1"><div class="sc-label">Spatial Summary</div><div class="sc-val" id="sgSummary" style="font-size:12px; font-weight:400; line-height:1.4">—</div></div>
+      </div>
+    </div>
+
+    <div>
+      <div class="panel-title">Priority Scale</div>
+      <div style="display:flex; flex-direction:column; gap:4px; margin-top:6px">
+        <div style="display:flex; gap:8px; align-items:center; font-size:12px"><span style="width:10px;height:10px;border-radius:50%;background:#ef4444;flex-shrink:0"></span>1 SAFETY — Stairs, vehicles, curbs</div>
+        <div style="display:flex; gap:8px; align-items:center; font-size:12px"><span style="width:10px;height:10px;border-radius:50%;background:#f97316;flex-shrink:0"></span>2 NAVIGATION — Path blocked, guidance</div>
+        <div style="display:flex; gap:8px; align-items:center; font-size:12px"><span style="width:10px;height:10px;border-radius:50%;background:#3b82f6;flex-shrink:0"></span>3 SOCIAL — People present</div>
+        <div style="display:flex; gap:8px; align-items:center; font-size:12px"><span style="width:10px;height:10px;border-radius:50%;background:#10b981;flex-shrink:0"></span>4 INFO — Text, menus, signs</div>
+        <div style="display:flex; gap:8px; align-items:center; font-size:12px"><span style="width:10px;height:10px;border-radius:50%;background:#475569;flex-shrink:0"></span>5 BACKGROUND — Furniture, objects</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right -->
+  <div class="col-right">
+    <div class="col-right-header">
+      <span class="panel-title" style="margin:0">Decision History</span>
+      <button class="btn btn-ghost" style="padding:3px 8px; font-size:11px" onclick="clearHistory()">Clear</button>
+    </div>
+    <div class="history-list" id="historyList">
+      <div style="padding:12px; font-size:13px; color:var(--muted)">History will appear here.</div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Config ──────────────────────────────────────────────────────────────────
+const API = location.origin;
+const SESSION = 'aura-' + Math.floor(Math.random() * 100000);
+const INTERVAL_MS = 2000;
+const VOICE = 'nova';
+
+document.getElementById('hdrSession').textContent = 'Session: ' + SESSION;
+document.getElementById('hdrSession').style.display = '';
+
+// ── State ────────────────────────────────────────────────────────────────────
+let camStream = null, timer = null, running = false;
+let frameCount = 0, spokeCount = 0;
+let dashWs = null;
+
+const PRIORITY_LABELS = { 1: 'SAFETY', 2: 'NAVIGATION', 3: 'SOCIAL', 4: 'INFO', 5: 'BG' };
+const PRIORITY_COLORS = { 1: '#ef4444', 2: '#f97316', 3: '#3b82f6', 4: '#10b981', 5: '#475569' };
+const AGENT_ORDER = ['hazard', 'navigation', 'social', 'ocr', 'suggestion'];
+
+// ── Audio queue ──────────────────────────────────────────────────────────────
+const audioQueue = {
+  q: [], playing: false, current: null,
+  enqueue(b64, priority) {
+    if (priority === 1) { this.interrupt(); this.q.unshift(b64); }
+    else this.q.push(b64);
+    this._next();
+  },
+  interrupt() {
+    if (this.current) { this.current.pause(); this.current.currentTime = 0; }
+    this.q = []; this.playing = false; this.current = null;
+    hideSpeakBadge();
+  },
+  _next() {
+    if (this.playing || !this.q.length) return;
+    this.playing = true;
+    const a = new Audio('data:audio/mp3;base64,' + this.q.shift());
+    this.current = a;
+    showSpeakBadge();
+    const done = () => { this.playing = false; this.current = null; this._next(); if (!this.q.length) hideSpeakBadge(); };
+    a.onended = done; a.onerror = done;
+    a.play().catch(done);
+  },
+};
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+function showSpeakBadge() { $('speakBadge').style.display = ''; }
+function hideSpeakBadge() { $('speakBadge').style.display = 'none'; }
+function showError(msg) { const b = $('errBanner'); b.textContent = msg; b.classList.add('show'); }
+function clearError() { $('errBanner').classList.remove('show'); }
+function showInfo(msg) { const b = $('infoBanner'); b.textContent = msg; b.classList.add('show'); }
+function clearInfo() { $('infoBanner').classList.remove('show'); }
+
+function formatTime(ts) {
+  const d = new Date(ts * 1000);
+  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+
+// ── Camera start/stop ────────────────────────────────────────────────────────
+async function startAura() {
+  clearError();
+  try {
+    camStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+    $('video').srcObject = camStream;
+    running = true;
+    $('btnStart').style.display = 'none';
+    $('btnStop').style.display = '';
+    $('liveBadge').style.display = '';
+    $('dotLive').classList.add('live');
+    captureAndSend();
+    timer = setInterval(captureAndSend, INTERVAL_MS);
+  } catch (err) {
+    showError('Camera error: ' + err.message);
+  }
+}
+
+function stopAura() {
+  clearInterval(timer);
+  camStream?.getTracks().forEach(t => t.stop());
+  $('video').srcObject = null;
+  running = false;
+  $('btnStart').style.display = '';
+  $('btnStop').style.display = 'none';
+  $('liveBadge').style.display = 'none';
+  $('dotLive').classList.remove('live');
+  audioQueue.interrupt();
+}
+
+// ── Frame capture and send ───────────────────────────────────────────────────
+async function captureAndSend() {
+  const video = $('video');
+  const canvas = $('canvas');
+  if (!video.srcObject || video.readyState < 2) return;
+
+  canvas.getContext('2d').drawImage(video, 0, 0, 640, 480);
+  const b64 = canvas.toDataURL('image/jpeg', 0.8).split(',')[1];
+
+  frameCount++;
+  $('statFrames').textContent = frameCount;
+  $('hdrFrames').textContent = frameCount;
+
+  const t0 = Date.now();
+  try {
+    const res = await fetch(`${API}/stream/frame`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ frame_base64: b64, session_id: SESSION, voice: VOICE, return_audio: true }),
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    const latency = Date.now() - t0;
+    clearError();
+
+    $('statLatency').textContent = latency + 'ms';
+    $('hdrLatency').textContent = latency + 'ms';
+
+    if (data.scene_graph) updateSceneGrid(data.scene_graph);
+    if (data.dashboard) updateAgentRows(data.dashboard, data.winner_agent, data.priority);
+
+    if (data.narration) {
+      updateNarration(data.narration, data.winner_agent, data.priority, data.dashboard?.suppressed_elements || []);
+    }
+
+    if (data.should_speak && data.audio_base64) {
+      spokeCount++;
+      $('statSpoke').textContent = spokeCount;
+      $('hdrSpoke').textContent = spokeCount;
+      audioQueue.enqueue(data.audio_base64, data.priority);
+    }
+  } catch (err) {
+    showError('Frame error: ' + err.message);
+  }
+}
+
+// ── UI update functions ───────────────────────────────────────────────────────
+function updateNarration(text, agent, priority, suppressed) {
+  const color = PRIORITY_COLORS[priority] || '#475569';
+  const label = PRIORITY_LABELS[priority] || '—';
+  const card = $('narrationCard');
+  card.style.display = '';
+  card.style.background = color + '18';
+  card.style.borderColor = color + '44';
+  $('narrationLabel').textContent = label + ' · ' + (agent || '—');
+  $('narrationLabel').style.color = color;
+  $('narrationText').textContent = text;
+  $('narrationEmpty').style.display = 'none';
+
+  const sl = $('suppressedList');
+  sl.innerHTML = '';
+  if (suppressed.length) {
+    sl.textContent = 'Suppressed: ';
+    suppressed.forEach(s => {
+      const sp = document.createElement('span');
+      sp.textContent = s;
+      sl.appendChild(sp);
+    });
+  }
+}
+
+function updateAgentRows(dashboard, winnerAgent, priority) {
+  const container = $('agentRows');
+  const decisions = dashboard.agent_decisions || [];
+  const color = PRIORITY_COLORS[priority] || '#475569';
+
+  const rows = AGENT_ORDER.map(name => {
+    const d = decisions.find(x => x.agent === name) || { agent: name, score: 0, priority: 5, message: '' };
+    const isWinner = d.agent === winnerAgent;
+    const barColor = isWinner ? color : '#334155';
+    const pct = Math.round(d.score * 100);
+    return `
+      <div class="agent-row" title="${d.message || '(no message)'}">
+        <span class="agent-name">${d.agent}</span>
+        <div class="agent-bar-wrap">
+          <div class="agent-bar" style="width:${pct}%; background:${barColor}"></div>
+        </div>
+        <span class="agent-score">${d.score > 0 ? d.score.toFixed(2) : '—'}</span>
+        ${isWinner ? '<span class="win-badge">WIN</span>' : '<span style="width:29px"></span>'}
+      </div>`;
+  });
+  container.innerHTML = rows.join('');
+}
+
+function updateSceneGrid(sg) {
+  $('sgEnv').textContent = sg.environment || '—';
+  $('sgPath').textContent = sg.path_clear ? '✓ Clear' : '✗ Blocked';
+  $('sgPath').style.color = sg.path_clear ? '#10b981' : '#ef4444';
+  $('sgPeople').textContent = (sg.people || []).length;
+  $('sgHazards').textContent = (sg.hazards || []).length;
+  $('statPeople').textContent = (sg.people || []).length;
+
+  const texts = sg.text_detected || [];
+  $('sgText').textContent = texts.length ? texts.join(' · ') : '—';
+  $('sgSummary').textContent = sg.spatial_summary || '—';
+}
+
+// ── Dashboard WebSocket (real-time push from server) ──────────────────────────
+function connectDashboardWs() {
+  const wsUrl = API.replace('http', 'ws') + '/dashboard/ws';
+  showInfo('Connecting to dashboard WebSocket…');
+  try {
+    dashWs = new WebSocket(wsUrl);
+  } catch (e) { clearInfo(); return; }
+
+  dashWs.onopen = () => { clearInfo(); };
+  dashWs.onmessage = ev => {
+    try {
+      const data = JSON.parse(ev.data);
+      if (data.heartbeat) return;
+      // History push from server (dashboard broadcast)
+      prependHistory(data);
+    } catch (_) {}
+  };
+  dashWs.onerror = () => { clearInfo(); };
+  dashWs.onclose = () => {
+    clearInfo();
+    setTimeout(connectDashboardWs, 4000);  // auto-reconnect
+  };
+}
+
+function prependHistory(entry) {
+  const list = $('historyList');
+  // Remove placeholder
+  const placeholder = list.querySelector('div[style]');
+  if (placeholder) placeholder.remove();
+
+  const priority = entry.priority_level || 5;
+  const color = PRIORITY_COLORS[priority] || '#475569';
+  const label = PRIORITY_LABELS[priority] || 'BG';
+  const agent = entry.agent_decisions?.find(d => !d.suppressed)?.agent || '—';
+  const narration = entry.chosen_narration || '(silence)';
+  const ts = entry.timestamp ? formatTime(entry.timestamp) : '';
+
+  const item = document.createElement('div');
+  item.className = 'history-item';
+  item.innerHTML = `
+    <div class="hi-top">
+      <span class="hi-agent">
+        <span class="hi-priority" style="background:${color}"></span>
+        ${label} · ${agent}
+      </span>
+      <span class="hi-time">${ts}</span>
+    </div>
+    <div class="hi-narration">${narration || '<span style="color:var(--muted)">Suppressed</span>'}</div>
+  `;
+  list.insertBefore(item, list.firstChild);
+
+  // Keep max 80 items
+  while (list.children.length > 80) list.removeChild(list.lastChild);
+}
+
+// ── Clear history ─────────────────────────────────────────────────────────────
+async function clearHistory() {
+  await fetch(`${API}/dashboard/history?session_id=${SESSION}`, { method: 'DELETE' });
+  $('historyList').innerHTML = '<div style="padding:12px; font-size:13px; color:var(--muted)">History cleared.</div>';
+  frameCount = 0; spokeCount = 0;
+  ['statFrames','statSpoke','hdrFrames','hdrSpoke'].forEach(id => $(id).textContent = '0');
+  ['statLatency','hdrLatency'].forEach(id => $(id).textContent = '—');
+  $('narrationCard').style.display = 'none';
+  $('narrationEmpty').style.display = '';
+  $('agentRows').innerHTML = '<div style="color:var(--muted); font-size:13px">Waiting for first frame…</div>';
+  ['sgEnv','sgPath','sgPeople','sgHazards','sgText','sgSummary','statPeople'].forEach(id => $(id).textContent = '—');
+}
+
+// ── Boot ─────────────────────────────────────────────────────────────────────
+connectDashboardWs();
+</script>
+</body>
+</html>

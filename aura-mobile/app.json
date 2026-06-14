@@ -1,0 +1,52 @@
+{
+  "expo": {
+    "name": "Aura 2.0",
+    "slug": "aura-ai-companion",
+    "version": "2.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#090910"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#090910"
+      },
+      "package": "com.aura.aicompanion",
+      "versionCode": 1,
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.INTERNET",
+        "android.permission.VIBRATE"
+      ]
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.aura.aicompanion",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Aura needs camera access to analyze your surroundings and guide you safely.",
+        "NSMicrophoneUsageDescription": "Aura needs microphone access for voice queries.",
+        "NSPhotoLibraryUsageDescription": "Aura may save captured frames for analysis."
+      }
+    },
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Aura needs camera access to analyze your surroundings.",
+          "microphonePermission": "Aura needs microphone access for voice queries."
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "aura-ai-companion"
+      }
+    }
+  }
+}
