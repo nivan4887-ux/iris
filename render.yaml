@@ -1,0 +1,28 @@
+services:
+  - type: web
+    name: aura-backend
+    env: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: OPENAI_API_KEY
+        sync: false          # set this manually in Render dashboard
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: aura-redis
+          property: connectionString
+      - key: MOCK_MODE
+        value: "false"
+      - key: VISION_PROVIDER
+        value: "openai"
+      - key: NARRATION_COOLDOWN_SECONDS
+        value: "25"
+      - key: MAX_HISTORY_ITEMS
+        value: "50"
+
+  - type: redis
+    name: aura-redis
+    plan: free
+    maxmemoryPolicy: allkeys-lru

@@ -45,8 +45,9 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "aura-ai-companion"
+        "projectId": "ade3d5b6-0c12-439f-b0e8-2d21dc9b07ad"
       }
-    }
+    },
+    "owner": "nivan_10"
   }
 }
