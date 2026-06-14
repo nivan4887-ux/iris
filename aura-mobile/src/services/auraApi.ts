@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-export const DEFAULT_API_URL = 'http://192.168.1.100:8000'; // update to your PC's LAN IP
+export const DEFAULT_API_URL = 'https://redis-production-a3a8.up.railway.app';
 
 export async function getApiUrl(): Promise<string> {
   return (await AsyncStorage.getItem('api_url')) ?? DEFAULT_API_URL;
